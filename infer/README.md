@@ -1,20 +1,20 @@
 # CMD TNBC Inference
 
-This folder provides the reviewer-facing TNBC semantic segmentation inference
-pipeline. The CMD backbone, mask-diffusion process, checkpoint loading, and
-pathology encoder are imported from the shared `cmd` package at the repository
-root. This folder contains only the TNBC task configuration, segmentation head,
-image I/O, and command-line orchestration.
+This folder provides the TNBC semantic segmentation inference pipeline. The CMD
+backbone, mask-diffusion process, checkpoint loading, and pathology encoder are
+imported from the shared `cmd` package at the repository root. This folder
+contains the TNBC task configuration, segmentation head, image I/O, and
+command-line orchestration.
 
 ## Structure
 
 - `tnbc_infer.py`: command-line entry point.
-- `cmd_model/config.py`: released TNBC inference configuration.
+- `cmd_model/config.py`: TNBC inference configuration.
 - `cmd_model/features.py`: CMD feature extraction for TNBC segmentation.
 - `cmd_model/head.py`: TNBC segmentation decoder.
 - `cmd_model/segmentor.py`: end-to-end CMD feature extractor plus TNBC decoder.
-- `cmd_model/io.py`: image loading, prediction saving, overlays, and anonymous
-  output metadata.
+- `cmd_model/io.py`: image loading, prediction saving, overlays, and output
+  metadata.
 - `cmd_model/inference.py`: CLI orchestration.
 
 ## Checkpoints
@@ -41,7 +41,7 @@ python tnbc_infer.py \
   --pathology-model-path /path/to/H0-mini/pytorch_model.bin
 ```
 
-If weights are placed in the default release layout, the explicit checkpoint
+If weights are placed in the default directory layout, the explicit checkpoint
 arguments can be omitted:
 
 - `weight/CMD-L/ema_0.9999_0080000.pt`
@@ -67,5 +67,5 @@ For each input image, the script writes:
   size.
 - `*_overlay.png`: red overlay for the TNBC foreground class.
 - `*_prob.npy`: optional per-class probabilities when `--save-prob` is enabled.
-- `manifest.json`: anonymous run metadata with checkpoint file names, output file
-  names, class names, and foreground ratios only.
+- `manifest.json`: run metadata with checkpoint file names, output file names,
+  class names, and foreground ratios.
