@@ -1,9 +1,8 @@
 # CMD Downstream Segmentation
 
 This folder fine-tunes a lightweight convolutional segmentation head on frozen
-CMD features. It is intended for reviewer reproduction of downstream semantic
-segmentation experiments. The CMD backbone and the pathology encoder remain
-frozen; only `best_model.pth`, the segmentation head checkpoint, is trained.
+CMD features. The CMD backbone and the pathology encoder remain frozen; only
+`best_model.pth`, the segmentation head checkpoint, is trained.
 
 ## Dataset JSON
 
@@ -60,7 +59,7 @@ values must still be valid class indices.
 Run from the repository root:
 
 ```bash
-cd /path/to/reviewer_release
+cd /path/to/cmd_repository
 export PYTHONPATH="$PWD"
 
 python downstream/train_seg_head.py \
@@ -79,8 +78,8 @@ python downstream/train_seg_head.py \
 
 For UNI conditioning, use `--pathology-model-name uni` and provide the local UNI
 `pytorch_model.bin`. To reproduce a no-pathology ablation-style run without a
-pathology encoder, pass `--disable-pathology`. The released default keeps
-pathology conditioning enabled.
+pathology encoder, pass `--disable-pathology`. By default, pathology
+conditioning is enabled.
 
 ## Outputs
 
@@ -91,12 +90,12 @@ The output directory contains:
 - `predictions/`: optional test prediction PNGs when `--save-predictions` is
   enabled.
 
-`best_model.pth` is compatible with the released inference head layout when the
-same CMD feature dimension and number of classes are used.
+`best_model.pth` is compatible with the inference head layout when the same CMD
+feature dimension and number of classes are used.
 
 ## Smoke Test
 
-For a code-path smoke test without released CMD weights, use `--allow-random-cmd`
-and `--disable-pathology` on a tiny synthetic dataset. This is only for checking
-that the data loader, feature extraction, optimizer, and checkpoint writing work;
-it is not a meaningful model evaluation.
+For a code-path smoke test without CMD weights, use `--allow-random-cmd` and
+`--disable-pathology` on a tiny synthetic dataset. This is only for checking that
+the data loader, feature extraction, optimizer, and checkpoint writing work; it
+is not a meaningful model evaluation.
