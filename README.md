@@ -1,8 +1,8 @@
-# CMD Reviewer Release
+# CMD Implementation
 
 This repository contains the implementation of CMD, including
-the pretraining code and the TNBC inference pipeline used in the submitted
-study. 
+the pretraining code, downstream segmentation training, and the TNBC inference
+pipeline.
 
 ## Repository Layout
 
@@ -18,13 +18,13 @@ study.
 
 ## Environment
 
-Use the provided `pfm_seg` environment or an equivalent Python environment with
-PyTorch, torchvision, timm, accelerate, Pillow, and NumPy installed. VAE-backed
-training additionally requires diffusers.
+Use Python 3.10+ with PyTorch, torchvision, timm, accelerate, Pillow, and NumPy
+installed. VAE-backed training additionally requires diffusers. Create a virtual
+environment or conda env as you prefer, then point `PYTHONPATH` at the repository
+root so `cmd`, `pretrain`, `downstream`, and `infer` resolve as packages.
 
 ```bash
-conda activate pfm_seg
-cd /path/to/reviewer_release
+cd /path/to/cmd_repository
 export PYTHONPATH="$PWD"
 ```
 
@@ -84,9 +84,9 @@ automatically.
 
 ## TNBC Inference
 
-See `infer/README.md` for the task-specific segmentation pipeline. Required
-weights are provided as local paths or environment variables; no private paths
-are embedded in the code.
+See `infer/README.md` for the task-specific segmentation pipeline. Checkpoint
+and encoder weights are supplied via CLI arguments or environment variables
+(documented there).
 
 ## Downstream Segmentation
 
