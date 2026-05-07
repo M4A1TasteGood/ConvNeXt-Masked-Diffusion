@@ -1,9 +1,7 @@
 # CMD Pretraining
 
-This folder provides the reviewer-facing CMD pretraining entry point. It
-implements the behavior of the internal training launcher with explicit command
-line arguments and JSONL input, without private paths or latent-cache
-precomputation.
+This folder provides the CMD pretraining entry point. It implements the training
+launcher with explicit command-line arguments and JSONL input.
 
 ## Input
 
@@ -19,7 +17,7 @@ flipped unless disabled, and normalized to `[-1, 1]`.
 
 ## Default Training Configuration
 
-The defaults match the released CMD pretraining setup:
+The default training configuration is:
 
 - `--cmd-size B`
 - `--backbone pixel`
@@ -37,7 +35,7 @@ The defaults match the released CMD pretraining setup:
 Smoke test:
 
 ```bash
-cd /path/to/reviewer_release
+cd /path/to/cmd_repository
 export PYTHONPATH="$PWD"
 python -m pretrain.train_cmd \
   --data-jsonl /path/to/train.jsonl \
