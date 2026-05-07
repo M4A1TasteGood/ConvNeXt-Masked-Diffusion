@@ -1,67 +1,95 @@
-# CMD TNBC Inference
+# CMD Reviewer Release
 
-This folder provides a clean TNBC semantic segmentation inference pipeline with CMD features and a trained TNBC segmentation head. It is intended to be run directly from this directory.
+This repository contains the implementation of CMD, including
+the pretraining code and the TNBC inference pipeline used in the submitted
+study. 
 
-## Structure
+## Repository Layout
 
-- `tnbc_infer.py`: command-line entry point.
-- `cmd_tnbc/config.py`: released TNBC inference configuration.
-- `cmd_tnbc/cmd_model.py`: CMD backbone definition.
-- `cmd_tnbc/diffusion.py`: CMD masking process.
-- `cmd_tnbc/features.py`: CMD instantiation, checkpoint loading, and feature extraction.
-- `cmd_tnbc/head.py`: TNBC segmentation decoder.
-- `cmd_tnbc/pathology_encoder.py`: H0-mini feature encoder wrapper.
-- `cmd_tnbc/segmentor.py`: end-to-end CMD + TNBC model wrapper.
-- `cmd_tnbc/io.py`: image loading, mask saving, overlays, and anonymous metadata.
-- `cmd_tnbc/inference.py`: CLI orchestration.
+- `cmd/`: shared CMD implementation, including model definitions, mask-diffusion
+  training objective, pathology encoder wrappers, JSONL data loading, checkpoint
+  utilities, and the training loop.
+- `pretrain/`: command-line entry point for CMD pretraining from a JSONL image
+  manifest.
+- `downstream/`: segmentation-head fine-tuning on frozen CMD features from a
+  JSON dataset with image and single-channel mask paths.
+- `infer/`: TNBC semantic segmentation inference pipeline. It reuses the shared
+  CMD package and keeps only the TNBC task-specific decoder and output logic.
 
-## Requirements
+## Environment
 
-Install Python dependencies compatible with your CUDA/PyTorch setup:
-
-```bash
-pip install torch torchvision timm pillow numpy
-```
-
-## Checkpoints
-
-Prepare three local files before running:
-
-- CMD pretrained checkpoint: `ema_0.9999_0080000.pt`
-- TNBC segmentation head checkpoint: `best_model.pth`
-- H0-mini pathology encoder weights: `pytorch_model.bin`
-
-For H0-mini, keep `config.json` in the same directory as `pytorch_model.bin`, or set `H0_MINI_HUB_DIR` to that directory.
-
-## Usage
-
-Run from this directory:
+Use the provided `pfm_seg` environment or an equivalent Python environment with
+PyTorch, torchvision, timm, accelerate, Pillow, and NumPy installed. VAE-backed
+training additionally requires diffusers.
 
 ```bash
-python tnbc_infer.py \
-  --input /path/to/tnbc/image_or_folder \
-  --output-dir outputs/tnbc_inference \
-  --cmd-checkpoint /path/to/ema_0.9999_0080000.pt \
-  --tnbc-head-checkpoint /path/to/best_model.pth \
-  --pathology-model-path /path/to/H0-mini/pytorch_model.bin
+conda activate pfm_seg
+cd /path/to/reviewer_release
+export PYTHONPATH="$PWD"
 ```
 
-The checkpoint paths can also be provided with environment variables:
+## Data Manifest
+
+Pretraining uses JSONL. Each line must be either a string image path or an object
+with `image_path`:
+
+```json
+"/path/to/image_0001.png"
+{"image_path": "/path/to/image_0002.png"}
+```
+
+## CMD Pretraining
+
+Single-process smoke run:
 
 ```bash
-export CMD_CHECKPOINT=/path/to/ema_0.9999_0080000.pt
-export TNBC_HEAD_CHECKPOINT=/path/to/best_model.pth
-export H0_MINI_WEIGHTS=/path/to/H0-mini/pytorch_model.bin
-python tnbc_infer.py --input /path/to/tnbc/image_or_folder
+python -m pretrain.train_cmd \
+  --data-jsonl /path/to/train.jsonl \
+  --out-dir outputs/pretrain_cmd_smoke \
+  --cmd-size B \
+  --backbone pixel \
+  --pathology-model-name uni \
+  --pathology-model-path /path/to/UNI/pytorch_model.bin \
+  --batch-size 1 \
+  --total-steps 1 \
+  --num-workers 0 \
+  --save-interval 1
 ```
 
-## Outputs
+Multi-GPU training:
 
-For each input image, the script writes:
+```bash
+accelerate launch --mixed_precision no --num_processes 4 pretrain/train_cmd.py \
+  --data-jsonl /path/to/train.jsonl \
+  --out-dir outputs/pretrain_cmd \
+  --cmd-size B \
+  --backbone pixel \
+  --pathology-model-name uni \
+  --pathology-model-path /path/to/UNI/pytorch_model.bin \
+  --image-size 256 \
+  --diffusion-steps 1000 \
+  --patch-size 8 \
+  --lr 3e-5 \
+  --batch-size 32 \
+  --total-steps 50000 \
+  --num-workers 16 \
+  --log-interval 100 \
+  --save-interval 5000
+```
 
-- `*_mask.png`: 256 x 256 predicted label mask.
-- `*_mask_original_size.png`: predicted label mask resized back to the original image size.
-- `*_overlay.png`: red overlay for the TNBC foreground class.
-- `*_prob.npy`: optional per-class probabilities when `--save-prob` is enabled.
-- `manifest.json`: anonymous run metadata with checkpoint file names only.
-# ConvNeXt-Masked-Diffusion
+The training script writes `log.txt`, `{step:07d}.pt`, and
+`ema_0.9999_{step:07d}.pt` to the output directory. If `--resume-checkpoint` is
+not specified, the latest numbered checkpoint in `--out-dir` is used
+automatically.
+
+## TNBC Inference
+
+See `infer/README.md` for the task-specific segmentation pipeline. Required
+weights are provided as local paths or environment variables; no private paths
+are embedded in the code.
+
+## Downstream Segmentation
+
+See `downstream/README.md` for fine-tuning a segmentation head from a dataset
+JSON containing `image_path` and `mask_path` entries. Masks must be
+single-channel PNG files whose pixel values are class indices.
