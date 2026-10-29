@@ -138,13 +138,10 @@ The training loop runs in bfloat16 through Accelerate. The output directory cont
 ## Citation
 
 ```bibtex
-@misc{chen2026vittokensmaskeddiffusionpretrained,
-      title={Beyond ViT Tokens: Masked-Diffusion Pretrained Convolutional Pathology Foundation Model for Cell-Level Dense Prediction},
-      author={Weiming Chen and Xitong Ling and Zhenyang Cai and Xidong Wang and Jiawen Li and Tian Guan and Benyou Wang and Yonghong He},
-      year={2026},
-      eprint={2605.08276},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2605.08276},
+@article{chen2026beyond,
+  title={Beyond ViT Tokens: Masked-Diffusion Pretrained Convolutional Pathology Foundation Model for Cell-Level Dense Prediction},
+  author={Chen, Weiming and Ling, Xitong and Cai, Zhenyang and Wang, Xidong and Li, Jiawen and Guan, Tian and Wang, Benyou and He, Yonghong},
+  journal={arXiv preprint arXiv:2605.08276},
+  year={2026}
 }
 ```
