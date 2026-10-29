@@ -1,1 +1,1 @@
-"""Downstream CMD segmentation-head fine-tuning."""
+"""Downstream segmentation fine-tuning on frozen CMD features."""

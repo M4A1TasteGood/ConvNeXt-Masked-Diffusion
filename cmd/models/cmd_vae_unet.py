@@ -1,19 +1,19 @@
-"""
-CMD latent-space model 原始 3-level 架构 —— 在 VAE 潜空间上操作。
+"""Latent-space CMD: a 3-level ConvNeXt U-Net that runs in VAE latent space.
 
-架构与 the reference implementation 完全一致：
-    encoder_level_1 (H)  -> Down -> encoder_level_2 (2H) -> Down
+The topology matches the pixel CMD decoder layout:
+
+    encoder_level_1 (H) -> Down -> encoder_level_2 (2H) -> Down
         -> latent (4H)
         -> Up -> cat(enc2) -> reduce -> decoder_level_2 (2H)
         -> Up -> cat(enc1) -> reduce -> decoder_level_1 (H)
         -> output_layer -> final_layer
 
-差异：
-    * 条件嵌入：将CMD 的类别 LabelEmbedder 替换为 UNI 病理大模型特征投影器；
-      每个通道尺度有独立的 TimestepEmbedder + PathologyProjector，融合方式为
-      c = t_emb + p_emb，作为 adaLN-Zero 的条件输入。
-    * 为支持特征提取钩子，decoder 部分暴露一个扁平的 ``output_blocks``
-      ModuleList（decoder_level_2 + decoder_level_1 按顺序拼接）。
+Conditioning replaces a class embedding with a pathology-foundation-model
+projector. Each channel scale has its own timestep embedder and projector, and
+the adaLN-Zero condition is ``c = t_emb + p_emb``. Decoder blocks are also
+exposed as a flat ``output_blocks`` list (``decoder_level_2`` then
+``decoder_level_1``) so feature hooks can index them the same way as the pixel
+model.
 """
 
 import math
@@ -67,7 +67,7 @@ class TimestepEmbedder(nn.Module):
 
 
 class PathologyProjector(nn.Module):
-    """将 UNI 等病理大模型的特征（默认 1024 维）投影到 adaLN 条件维度。"""
+    """Project pathology-encoder features into the adaLN conditioning width."""
 
     def __init__(self, in_dim, hidden_size):
         super().__init__()
@@ -172,24 +172,24 @@ class Upsample(nn.Module):
 # ---------------------------------------------------------------------------
 
 class CMDVAEUNet(nn.Module):
-    """CMD —— VAE 潜空间版，UNI 条件。
+    """Latent-space CMD conditioned on a frozen pathology encoder.
 
-    参数
-    ----
-    in_channels : int
-        潜空间通道数（SD-VAE 为 4）。
-    hidden_size : int
-        基础通道宽度 H；三个层级通道数为 (H, 2H, 4H)。
-    depth : list[int]
-        长度为 5 的列表：``[enc1, enc2, latent, dec2, dec1]``。
-    mlp_ratio : float
-        ConvNeXt Block 中 pointwise MLP 的扩展比。
-    learn_sigma : bool
-        若为 True，输出通道为 ``2 * in_channels``。
-    pathology_feat_dim : int
-        UNI 等病理大模型特征维度；0 表示不使用病理条件。
-    use_checkpoint : bool
-        是否使用 ``torch.utils.checkpoint``。
+    Parameters
+    ----------
+    in_channels :
+        Latent channels. Stable Diffusion's VAE uses 4.
+    hidden_size :
+        Base width ``H``. The three scales use ``(H, 2H, 4H)``.
+    depth :
+        Five integers: ``[enc1, enc2, latent, dec2, dec1]``.
+    mlp_ratio :
+        Expansion ratio of the pointwise MLP inside each ConvNeXt block.
+    learn_sigma :
+        When true, the output has ``2 * in_channels`` channels.
+    pathology_feat_dim :
+        Pathology-encoder width. ``0`` disables pathology conditioning.
+    use_checkpoint :
+        Enable ``torch.utils.checkpoint`` during training.
     """
 
     def __init__(
@@ -219,7 +219,7 @@ class CMDVAEUNet(nn.Module):
         self.t_embedder_2 = TimestepEmbedder(H * 2)
         self.t_embedder_3 = TimestepEmbedder(H * 4)
 
-        # --- pathology projectors (UNI -> adaLN 条件) ---
+        # Pathology projectors, one per channel scale.
         self.pathology_projectors = None
         if pathology_feat_dim > 0:
             self.pathology_projectors = nn.ModuleList(
@@ -265,7 +265,7 @@ class CMDVAEUNet(nn.Module):
         )
 
         # --- Flat output_blocks for feature extraction hooks ---
-        # 顺序：decoder_level_2 的所有 block，后跟 decoder_level_1 的所有 block。
+        # Order: every decoder_level_2 block, then every decoder_level_1 block.
         self.output_blocks = nn.ModuleList(
             list(self.decoder_level_2) + list(self.decoder_level_1)
         )
@@ -335,10 +335,13 @@ class CMDVAEUNet(nn.Module):
         """
         Parameters
         ----------
-        x : (N, C_latent, H, W) 潜空间张量（已由 VAE encode 得到）。
-        timesteps : (N,) 扩散时间步。
-        pathology_feat : (N, pathology_feat_dim) UNI 特征；若模型未启用
-            pathology 条件则应为 None。
+        x :
+            ``(N, C_latent, H, W)`` latent tensor produced by the VAE encoder.
+        timesteps :
+            ``(N,)`` diffusion timesteps.
+        pathology_feat :
+            ``(N, pathology_feat_dim)`` pathology features, or ``None`` when
+            pathology conditioning is disabled.
         """
         assert (pathology_feat is not None) == (
             self.pathology_projectors is not None
@@ -394,7 +397,7 @@ class CMDVAEUNet(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-#  Size presets (完全对齐 the reference implementation 的 CMD_models)
+#  Size presets for the latent-space CMD.
 # ---------------------------------------------------------------------------
 
 CMD_VAE_CONFIGS = {
@@ -435,18 +438,10 @@ def build_cmd_vae_unet(
 # ---------------------------------------------------------------------------
 
 def get_cmd_vae_stage_info(cmd_size: str):
-    """返回 VAE 版 CMD 解码器每个 stage 的最后一个 block 在
-    ``output_blocks`` 中的索引，以及对应的通道数（coarsest → finest）。
+    """Last ``output_blocks`` index and channel count of each decoder stage.
 
-    output_blocks 布局：
-        [dec2 blocks (2H 通道) ..., dec1 blocks (H 通道) ...]
-
-    Returns
-    -------
-    blocks : list[int]
-        每个 stage 最后一个 block 的索引。
-    channels : list[int]
-        对应 stage 的通道数，顺序为 coarsest → finest。
+    ``output_blocks`` is ``[dec2 blocks (2H), ..., dec1 blocks (H)]``.
+    Stages are ordered coarsest to finest.
     """
     if cmd_size not in CMD_VAE_CONFIGS:
         raise ValueError(
@@ -463,10 +458,10 @@ def get_cmd_vae_stage_info(cmd_size: str):
 
 
 def get_cmd_vae_feature_info(cmd_size: str, use_all_blocks: bool = False):
-    """返回用于特征提取的 ``output_blocks`` 索引与总特征维度（selective/all）。
+    """Decoder block indices and the concatenated feature dimension.
 
-    selective 模式：每个 decoder stage 取最后一个 block；若该 stage 有
-    >= 3 个 block，则再额外取中间的一个 block。
+    Selective mode keeps the last block of each decoder stage, plus the middle
+    block when that stage has at least three blocks.
     """
     if cmd_size not in CMD_VAE_CONFIGS:
         raise ValueError(

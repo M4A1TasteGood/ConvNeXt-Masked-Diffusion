@@ -1,0 +1,36 @@
+# Paths are resolved relative to this file.
+
+data:
+  # JSON manifest with num_classes and train / val / test splits.
+  json: /path/to/dataset.json
+  num_workers: 0
+  random_flip: true
+
+model:
+  # A weight file, or a directory that contains pytorch_model.bin.
+  cmd_checkpoint: /path/to/CMD-L
+  # Download H0-mini from https://huggingface.co/bioptimus/H0-mini.
+  # Keep config.json next to pytorch_model.bin, or set H0_MINI_HUB_DIR.
+  pathology_weights: /path/to/H0-mini/pytorch_model.bin
+  cmd_size: L
+  pathology_model_name: h0-mini
+  disable_pathology: false
+  allow_random_cmd: false
+  image_size: 256
+  diffusion_step: 50
+
+train:
+  output_dir: ../outputs/downstream
+  batch_size: 4
+  epochs: 150
+  lr: 0.0002
+  weight_decay: 0.0001
+  val_interval: 1
+  seed: 0
+  device: cuda:0
+  save_predictions: false
+
+loss:
+  ce_weight: 0.5
+  dice_weight: 0.5
+  ignore_index: 255

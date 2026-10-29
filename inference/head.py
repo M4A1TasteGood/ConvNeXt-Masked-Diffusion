@@ -1,12 +1,11 @@
-"""TNBC segmentation decoder."""
+"""Lightweight convolutional segmentation head trained on frozen CMD features."""
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
 
-from cmd.runtime.checkpoints import load_head_state_dict
-
+from .checkpoints import load_head_state_dict
 from .config import TNBCInferenceConfig
 
 
@@ -41,7 +40,9 @@ class DecoderBlock(nn.Module):
         return self.conv2(self.conv1(x))
 
 
-class TNBCSegmentationHead(nn.Module):
+class SegmentationHead(nn.Module):
+    """Convolutional decoder. The released TNBC head uses this layout."""
+
     def __init__(
         self,
         in_channels: int,
@@ -51,11 +52,10 @@ class TNBCSegmentationHead(nn.Module):
         super().__init__()
         head_channels = 512
         self.conv_more = Conv2dReLU(in_channels, head_channels, 3, padding=1)
-
-        in_chs = [head_channels] + list(decoder_channels[:-1])
+        in_channels_per_block = [head_channels, *decoder_channels[:-1]]
         self.blocks = nn.ModuleList(
             DecoderBlock(in_ch, out_ch)
-            for in_ch, out_ch in zip(in_chs, decoder_channels)
+            for in_ch, out_ch in zip(in_channels_per_block, decoder_channels)
         )
         self.seg_head = nn.Conv2d(decoder_channels[-1], num_classes, kernel_size=3, padding=1)
 
@@ -66,10 +66,14 @@ class TNBCSegmentationHead(nn.Module):
         return self.seg_head(x)
 
 
-def build_tnbc_head(config: TNBCInferenceConfig, device: torch.device) -> TNBCSegmentationHead:
-    model = TNBCSegmentationHead(
+# Name used by the released TNBC inference pipeline.
+TNBCSegmentationHead = SegmentationHead
+
+
+def build_tnbc_head(config: TNBCInferenceConfig, device: torch.device) -> SegmentationHead:
+    model = SegmentationHead(
         in_channels=config.feature_dim,
         num_classes=len(config.class_names),
     )
-    model.load_state_dict(load_head_state_dict(config.tnbc_head_checkpoint), strict=True)
+    model.load_state_dict(load_head_state_dict(config.seg_head_checkpoint), strict=True)
     return model.to(device).eval()

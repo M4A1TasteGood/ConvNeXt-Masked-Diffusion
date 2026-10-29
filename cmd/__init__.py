@@ -1,8 +1,9 @@
-"""Public CMD package for reviewer reproduction.
+"""ConvNeXt Masked-Diffusion (CMD) pretraining package.
 
-The package name is intentionally short for the released artifact. It also
-re-exports the standard-library ``cmd.Cmd`` class to avoid surprising tools that
-import ``cmd`` while this repository is on ``PYTHONPATH``.
+Downstream training and inference import the backbones defined here. The package
+name overlaps the Python standard-library ``cmd`` module, so ``Cmd`` is
+re-exported for tools that import ``cmd.Cmd`` while this repository is on
+``PYTHONPATH``.
 """
 
 from __future__ import annotations

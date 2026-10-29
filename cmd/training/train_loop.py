@@ -18,7 +18,6 @@ from collections import OrderedDict
 from time import time
 
 import torch
-import torch.distributed as dist
 from accelerate import Accelerator
 
 from cmd.models.pathology_encoder import (
@@ -98,9 +97,9 @@ def parse_step_from_filename(filename):
 
 def _build_vae(device, model_name="stabilityai/sd-vae-ft-ema", model_dir=None,
                dtype=torch.bfloat16):
-    """加载冻结的 SD-VAE（来自 ``diffusers``）。
+    """Load a frozen Stable Diffusion VAE from ``diffusers``.
 
-    默认以 bf16 加载，避免每个 step 在 fp32 下做 256x256 的 VAE encode。
+    The VAE is loaded in bf16 so each step does not encode 256x256 images in fp32.
     """
     from diffusers.models import AutoencoderKL
 
@@ -166,7 +165,7 @@ class TrainLoop:
             and model.pathology_projectors is not None
         )
 
-        # --- backbone / VAE 元信息（由 script_util.create_model_and_diffusion 注入）---
+        # Backbone and VAE metadata set by create_model_and_diffusion.
         self.backbone = getattr(model, "backbone", "pixel")
         self.vae_scaling_factor = float(getattr(model, "vae_scaling_factor", 0.18215))
         self.vae_model_name = getattr(model, "vae_model_name", None)
@@ -208,7 +207,8 @@ class TrainLoop:
             if self.accelerator.is_main_process:
                 print(
                     f"Loading {self.pathology_model_name} pathology feature "
-                    "extractor (bf16)..."
+                    "extractor (bf16)...",
+                    flush=True,
                 )
             self.pathology_model = build_pathology_encoder(
                 self.pathology_model_name,
@@ -220,7 +220,7 @@ class TrainLoop:
         self.vae = None
         if self.backbone == "vae":
             if self.accelerator.is_main_process:
-                print("Loading frozen SD-VAE for latent-space diffusion (bf16)...")
+                print("Loading frozen SD-VAE for latent-space diffusion (bf16)...", flush=True)
             self.vae = _build_vae(
                 self.device,
                 model_name=self.vae_model_name,
@@ -267,12 +267,12 @@ class TrainLoop:
             if "step" in state:
                 self.train_steps = state["step"]
             if self.accelerator.is_main_process:
-                print(f"Resumed from {ckpt_path} at step {self.train_steps}")
+                print(f"Resumed from {ckpt_path} at step {self.train_steps}", flush=True)
         else:
             model.load_state_dict(state, strict=False)
             update_ema(self.ema, model, decay=0)
             if self.accelerator.is_main_process:
-                print(f"Loaded weights from {ckpt_path} (no optimizer state)")
+                print(f"Loaded weights from {ckpt_path} (no optimizer state)", flush=True)
 
     def _save_checkpoint(self):
         if not self.accelerator.is_main_process:
@@ -295,10 +295,10 @@ class TrainLoop:
 
     @torch.no_grad()
     def _vae_encode(self, images):
-        """将像素图像（[-1, 1]）编码到潜空间，并按 SD-VAE scaling 缩放。
+        """Encode ``[-1, 1]`` images into scaled SD-VAE latents.
 
-        VAE 在 bf16 下 eval 加载，这里把输入 cast 到同一精度，避免每个 step
-        都做一次 fp32 → bf16 的隐式转换 / fp32 全量前向。
+        The VAE runs in eval under bf16. Inputs are cast to that dtype so each
+        step does not fall back to a full fp32 forward.
         """
         vae_dtype = next(self.vae.parameters()).dtype
         posterior = self.vae.encode(images.to(dtype=vae_dtype)).latent_dist

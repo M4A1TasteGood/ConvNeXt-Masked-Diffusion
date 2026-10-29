@@ -86,7 +86,7 @@ class JsonlPretrainDataset(Dataset):
         self.image_paths = all_paths[shard::num_shards]
         if not self.image_paths:
             raise ValueError("This data shard is empty; reduce the number of processes or add more images.")
-        print(f"[CMD data] loaded {len(self.image_paths)} images from JSONL manifest")
+        print(f"[CMD data] loaded {len(self.image_paths)} images from JSONL manifest", flush=True)
 
     def __len__(self) -> int:
         return len(self.image_paths)

@@ -1,0 +1,9 @@
+torch>=2.1
+torchvision
+timm>=1.0
+numpy
+Pillow
+PyYAML
+accelerate>=0.30
+# Optional: only required for latent-space pretraining (`--backbone vae`).
+# diffusers>=0.27

@@ -1,4 +1,4 @@
-"""End-to-end CMD TNBC segmentor."""
+"""End-to-end frozen CMD encoder plus segmentation head."""
 
 from __future__ import annotations
 
@@ -19,8 +19,7 @@ class CMDTNBCSegmentor(nn.Module):
 
     @torch.no_grad()
     def forward(self, image: torch.Tensor) -> torch.Tensor:
-        features = self.feature_extractor(image)
-        features = features.unsqueeze(0)
+        features = self.feature_extractor(image).unsqueeze(0)
         return self.head(features)
 
 

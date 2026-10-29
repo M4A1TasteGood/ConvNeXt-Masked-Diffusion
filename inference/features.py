@@ -1,30 +1,20 @@
-"""CMD feature extraction used by the TNBC segmentation head."""
+"""Single-image CMD feature extraction for the released segmentation head."""
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
 
-from cmd.models.factory import create_cmd_model
+from cmd.models.factory import create_cmd_model, get_cmd_feature_info
 from cmd.models.mask_diffusion import CMDMasking
 from cmd.models.pathology_encoder import build_pathology_encoder, extract_pathology_features
-from cmd.runtime.checkpoints import load_cmd_state_dict
 
+from .checkpoints import load_cmd_state_dict
 from .config import TNBCInferenceConfig
 
 
-def _save_activations(module: nn.Module, features, name: str) -> None:
-    if isinstance(features, (list, tuple)):
-        value = [f.detach().float() if f is not None else None for f in features]
-    elif isinstance(features, dict):
-        value = {k: f.detach().float() for k, f in features.items()}
-    else:
-        value = features.detach().float()
-    setattr(module, name, value)
-
-
 def _save_output_hook(module: nn.Module, _inputs, output):
-    _save_activations(module, output, "activations")
+    module.activations = output.detach().float()
     return output
 
 
@@ -32,21 +22,22 @@ def collect_features(config: TNBCInferenceConfig, activations: list[torch.Tensor
     size = (config.image_size, config.image_size)
     resized = []
     for features in activations:
-        features = features[0][None]
-        features = nn.functional.interpolate(
-            features,
-            size=size,
-            mode=config.upsample_mode,
-        )
-        resized.append(features[0])
+        sample = features[0][None]
+        sample = nn.functional.interpolate(sample, size=size, mode=config.upsample_mode)
+        resized.append(sample[0])
     return torch.cat(resized, dim=0)
 
 
 class CMDFeatureExtractor(nn.Module):
-    """Instantiate CMD and expose the feature maps used by the TNBC head."""
-
     def __init__(self, config: TNBCInferenceConfig, device: torch.device):
         super().__init__()
+        blocks, feature_dim = get_cmd_feature_info(config.cmd_size)
+        if tuple(blocks) != tuple(config.feature_blocks) or feature_dim != config.feature_dim:
+            raise ValueError(
+                f"CMD-{config.cmd_size} features are blocks {blocks} with dim {feature_dim}, "
+                f"but this head expects blocks {config.feature_blocks} and dim {config.feature_dim}."
+            )
+
         self.config = config
         self.steps = [config.diffusion_step]
         self.pathology_model_name = config.pathology_model_name
@@ -79,11 +70,11 @@ class CMDFeatureExtractor(nn.Module):
                 block.register_forward_hook(_save_output_hook)
                 self.feature_blocks.append(block)
 
-        print("[CMD] loading H0-mini pathology encoder...")
+        print("[CMD] loading pathology encoder...")
         self.pathology_model = build_pathology_encoder(
             config.pathology_model_name,
             device,
-            weights_path=str(config.pathology_model_path),
+            weights_path=str(config.pathology_weights),
         )
 
     @torch.no_grad()
@@ -96,11 +87,11 @@ class CMDFeatureExtractor(nn.Module):
 
         activations = []
         for step in self.steps:
-            t = torch.tensor([int(step)], device=image.device, dtype=torch.long)
-            masked_image = self.diffusion.q_sample(image, t)
+            timestep = torch.tensor([int(step)], device=image.device, dtype=torch.long)
+            masked_image = self.diffusion.q_sample(image, timestep)
             self.cmd(
                 masked_image,
-                self.diffusion._scale_timesteps(t),
+                self.diffusion._scale_timesteps(timestep),
                 pathology_feat=pathology_feat,
             )
             for block in self.feature_blocks:
