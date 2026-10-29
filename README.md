@@ -1,4 +1,4 @@
-# Beyond ViT Tokens: Masked-Diffusion Pretrained Convolutional Pathology Foundation Model for Cell-Level Dense Prediction
+# Beyond ViT Tokens: Masked-Diffusion Pretrained Convolutional Pathology Foundation Model for Cell-Level Dense Prediction (NeurIPS 2026)
 
 <p align="left">
   <a href="https://arxiv.org/abs/2605.08276"><img src="https://img.shields.io/badge/arXiv-2605.08276-b31b1b.svg?logo=arxiv&logoColor=white" alt="arXiv"></a>
